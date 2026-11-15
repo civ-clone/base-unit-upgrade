@@ -1,0 +1,13 @@
+{
+  "name": "@civ-clone/base-unit-upgrade",
+  "version": "0.0.0",
+  "description": "Upgrading units to a newer type of the same role: the target lookup, upgrading every eligible unit at once, and the Upgraded rules.",
+  "repository": "git@github.com:civ-clone/base-unit-upgrade.git",
+  "keywords": [
+    "typescript",
+    "civilization"
+  ],
+  "author": "dom111 <dom111@users.noreply.github.com>",
+  "license": "MIT",
+  "private": false
+}
