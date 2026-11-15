@@ -19,7 +19,12 @@ needs from `lib/`.
 4. **Of several targets, the last** in `types` wins: the original loops over its whole table with no `break`.
 
 Every answer is about a type, never a unit, and comes from the rule set's own unit table, so give `types` in the
-table's order. A type with no role (`null`) never upgrades. The unit's own type is never its target.
+table's order. A type with no role (`null`) never upgrades.
+
+**The unit's own type is a candidate** like any other, as in the original. That can only happen when an
+`upgradeAdvances` entry gives a type its own prerequisite. The unit then "upgrades" to its own type: nothing about it
+changes, but `upgradeUnits` counts it and runs the `Upgraded` rules, so it loses its veteran status and `unit:upgraded`
+is emitted with the same type twice, as the original clears the flag and tells the player each time.
 
 **One step at a time.** A unit becomes its target even when the target is itself obsolete, and goes on at the next
 call, as in the original.
@@ -53,7 +58,14 @@ everything that points at it stays valid:
 - its orders and busy state, so a fortified unit stays fortified;
 - its unit improvements, its cargo, its pending effects.
 
-Its class is read from the object whenever it's saved or sent to a client, so both follow.
+Its class is read from the object whenever it's saved, so a save follows. **A client doesn't learn of the change by
+itself:** nothing re-sends the unit, so a client must handle `unit:upgraded` (the unit and its square).
+
+**Transports:** no constructor runs, so neither do the new type's field initialisers. The only ones a unit type has today
+are core-unit-transport's `Transport(Base)` mixin's two registries. A unit that becomes a transport gets
+`transportRegistry` and `transportRuleRegistry` (options of `changeType` and `upgradeUnits`; default the same instances
+the mixin's fields default to). After a load a game injects its own, so a rule set passes the game's registries. A
+unit that stops being a transport loses the two fields, which would otherwise be saved.
 
 **Moves:** the original keeps the moves *spent* this turn, so the unit has its new type's movement less what it had
 already spent, and never less than 0.

@@ -73,8 +73,9 @@ export const upgradeAdvance = (
  * 3. a target is a type whose prerequisite is that advance, with the same role and a hold at least as large;
  * 4. of several targets, the last in `types` wins.
  *
- * One step only: a target that is itself obsolete upgrades on a later call. The unit's own type is never its target
- *  (the original would only strip its veteran status).
+ * One step only: a target that is itself obsolete upgrades on a later call. The unit's own type is a candidate like
+ *  any other, as in the original: when it wins, the unit "upgrades" to its own type, which changes nothing but what
+ *  the `Upgraded` rules do (the original still clears its veteran flag and tells the player).
  */
 export const upgradeTarget = (
   unit: Unit,
@@ -99,7 +100,6 @@ export const upgradeTarget = (
 
   options.types.forEach((Candidate: UnitType): void => {
     if (
-      Candidate !== Type &&
       options.prerequisite(Candidate) === Advance &&
       options.role(Candidate) === role &&
       hold <= options.hold(Candidate)

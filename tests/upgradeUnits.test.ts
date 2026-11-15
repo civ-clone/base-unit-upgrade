@@ -28,7 +28,17 @@ import Upgraded from '../lib/Rules/Upgraded';
 import { Yield as YieldRule } from '@civ-clone/core-unit/Rules/Yield';
 import YieldValue from '@civ-clone/core-yield/Yield';
 import { expect } from 'chai';
+import {
+  ITransportUnit,
+  Transport,
+} from '@civ-clone/core-unit-transport/Transport';
+import TransportRegistry, {
+  instance as transportRegistryInstance,
+} from '@civ-clone/core-unit-transport/TransportRegistry';
+import TransportManifest from '@civ-clone/core-unit-transport/TransportManifest';
+import { DefendRole } from '@civ-clone/base-unit-role/Roles';
 import upgradedRules from '../lib/upgradedRules';
+import { weakerUnitsOfRole } from '../lib/upgradeTarget';
 
 // OpenCiv2 `civ_leonardo_upgrade` (`src/auto/civ.cpp`): every unit of the civ's with a target becomes it at once
 //  (`units[unit].type = unit_type3`), loses its veteran flag (`flags & ~UNITF_VETERAN`), and keeps everything else
@@ -235,5 +245,93 @@ describe('upgradeUnits', (): void => {
     expect(
       upgradedRules('test:x', { loses: [Veteran] }).map((rule) => rule.id())
     ).to.deep.equal(['test:x/lose-improvements', 'test:x/emit']);
+  });
+  it('should count a unit that becomes its own type: it loses veteran status and is announced', (): void => {
+    // OpenCiv2 `civ_leonardo_upgrade` has no check against the unit's own type: choosing it still clears the veteran
+    //  flag and tells the player.
+    const {
+        events,
+        player,
+        ruleRegistry,
+        unitImprovementRegistry,
+        unitOf,
+        unitRegistry,
+      } = setUp(),
+      unit = unitOf(Row2),
+      fortified = new Fortified(unit),
+      hasAdvance = () => true;
+
+    unitImprovementRegistry.register(new Veteran(unit), fortified);
+
+    const upgrades = upgradeUnits(player, {
+      types: [Row2],
+      obsoletedBy: () => null,
+      prerequisite: () => Advance35,
+      hold: () => 0,
+      role: () => DefendRole,
+      hasAdvance,
+      upgradeAdvances: [
+        weakerUnitsOfRole({
+          role: DefendRole,
+          defence: () => 1,
+          below: 3,
+          Advance: Advance35,
+          hasAdvance,
+          roleOf: () => DefendRole,
+        }),
+      ],
+      ruleRegistry,
+      unitRegistry,
+    });
+
+    expect(upgrades.length).to.equal(1);
+    expect(upgrades[0].slice(1)).to.deep.equal([Row2, Row2]);
+    expect(unit.sourceClass() === Row2).to.true;
+    expect(unit.moves().value()).to.equal(1);
+    expect(unitImprovementRegistry.getByUnit(unit)).to.deep.equal([fortified]);
+    expect(events.length).to.equal(1);
+    expect(events[0].slice(1)).to.deep.equal([Row2, Row2]);
+  });
+
+  it("should give a unit that becomes a transport the mixin's registries, and take them from one that stops", (): void => {
+    class Boat extends Transport(Unit) {}
+
+    const { unitOf, unitRegistry } = setUp(),
+      transportRegistry = new TransportRegistry(),
+      transportRuleRegistry = new RuleRegistry(),
+      raft = unitOf(Row2),
+      other = unitOf(Row2),
+      cargo = unitOf(Row2);
+
+    changeType(raft, Boat, { transportRegistry, transportRuleRegistry });
+
+    const boat = raft as unknown as ITransportUnit;
+
+    expect(boat._transportRegistry === transportRegistry).to.true;
+    expect(boat._transportRuleRegistry === transportRuleRegistry).to.true;
+    expect(boat.cargo()).to.deep.equal([]);
+    expect(boat.hasCargo()).to.false;
+
+    transportRegistry.register(
+      new TransportManifest(boat, cargo, cargo.tile())
+    );
+    expect(boat.cargo().length).to.equal(1);
+    expect(boat.cargo()[0] === cargo).to.true;
+
+    // The defaults are the instances the mixin's own fields default to.
+    changeType(other, Boat);
+    expect(
+      (other as unknown as ITransportUnit)._transportRegistry ===
+        transportRegistryInstance
+    ).to.true;
+
+    // A unit that already is a transport keeps its own.
+    changeType(raft, Boat);
+    expect(boat._transportRegistry === transportRegistry).to.true;
+
+    changeType(raft, Row7);
+    expect('_transportRegistry' in raft).to.false;
+    expect('_transportRuleRegistry' in raft).to.false;
+    expect(unitRegistry.getByPlayer(raft.player()).includes(raft)).to.true;
   });
 });

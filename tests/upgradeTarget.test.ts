@@ -28,7 +28,9 @@ import {
 import {
   AdvanceType,
   UnitType,
+  UpgradeOptions,
   rolesIn,
+  weakerUnitsOfRole,
   upgradeAdvance,
   upgradeTarget,
 } from '../lib/upgradeTarget';
@@ -146,24 +148,65 @@ describe('upgradeTarget', (): void => {
     );
   });
 
-  it('should never give a unit its own type, or a type with no role', (): void => {
+  it('should give a type with no role nothing', (): void => {
     class Odd extends Unit {}
     class Same extends Advance {}
 
-    const base = {
-      types: [Odd],
-      obsoletedBy: () => Same,
-      prerequisite: () => Same,
-      hold: () => 0,
-      hasAdvance: () => true,
-    };
+    expect(
+      upgradeTarget(unitOf(Odd), {
+        types: [Odd],
+        obsoletedBy: () => Same,
+        prerequisite: () => Same,
+        hold: () => 0,
+        hasAdvance: () => true,
+        role: () => null,
+      })
+    ).to.equal(null);
+  });
+
+  it("should give a unit its own type when it's the last that fits, as the original does", (): void => {
+    // A weak defender whose own prerequisite is the advance `weakerUnitsOfRole` gives it: the original's loop has no
+    //  check against the unit's own type, so with no later fit the unit "upgrades" to itself.
+    class Weak extends Unit {}
+    class Strong extends Unit {}
+
+    const defence = new Map<UnitType, number>([
+        [Weak, 2],
+        [Strong, 3],
+      ]),
+      Advance = Advance35,
+      hasAdvance = (player: Player, Needed: AdvanceType) =>
+        known.get(player)?.has(Needed) ?? false,
+      inOrder = (types: UnitType[]): UpgradeOptions => ({
+        types,
+        obsoletedBy: () => null,
+        prerequisite: () => Advance,
+        hold: () => 0,
+        role: () => DefendRole,
+        hasAdvance,
+        upgradeAdvances: [
+          weakerUnitsOfRole({
+            role: DefendRole,
+            defence: (Type: UnitType) => defence.get(Type)!,
+            below: 3,
+            Advance,
+            hasAdvance,
+            roleOf: () => DefendRole,
+          }),
+        ],
+      });
 
     expect(
-      upgradeTarget(unitOf(Odd), { ...base, role: () => DefendRole })
+      upgradeTarget(unitOf(Weak, Advance35), inOrder([Strong, Weak]))
+    ).to.equal(Weak);
+    expect(
+      upgradeTarget(unitOf(Weak, Advance35), inOrder([Weak, Strong]))
+    ).to.equal(Strong);
+    // Without the advance, nothing; a defence of 3 isn't weaker, and nothing makes it obsolete.
+    expect(upgradeTarget(unitOf(Weak), inOrder([Strong, Weak]))).to.equal(null);
+    expect(
+      upgradeTarget(unitOf(Strong, Advance35), inOrder([Strong, Weak]))
     ).to.equal(null);
-    expect(upgradeTarget(unitOf(Odd), { ...base, role: () => null })).to.equal(
-      null
-    );
   });
 
   it('should read roles from the `UnitRoles` rules', (): void => {
